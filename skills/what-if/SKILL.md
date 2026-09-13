@@ -1,0 +1,87 @@
+---
+name: what-if
+description: 决策前对比两个选项、或事后复盘「如果当时没那么做会怎样」时使用。用户会说：如果当时没卖会怎样 / 这两个方案哪个好 / 我当时要是空仓就好了 / 哪个选择对。
+---
+
+# 反事实对比
+
+## 何时使用
+
+- 「如果当时没卖，现在会怎样？」
+- 「这两个方案哪个好？我该选哪个？」
+- 「我当时要是空仓就好了。」
+- 「上次那笔操作，到底做对了没有？」
+- 「同样的行情，以前我换成另一种做法，结果会不一样吗？」
+- 「你觉得哪个选择对？」（要的是历史证据，不是拍脑袋）
+
+## 核心机制
+
+这个技能做两件事，用同一个工具 `causal-memory-counterfactual_query`，区别只在**调用时机**：
+
+1. **决策前（选之前）**：两个选项都还没发生。先用 `causal-memory-intervention_query` 预测「如果做这个动作，历史上通常会怎样」，再用 `causal-memory-counterfactual_query`（decision=你倾向的选项，alternative=另一个选项）看两条路在**相似情境**下的实证结果，然后才做决定。
+2. **决策后（复盘）**：只有一个选项真的发生了。直接 `causal-memory-counterfactual_query`，decision=**实际做的**那条，alternative=**没做**的那条，看没走的那条路在历史相似情境里通常是什么结果。
+
+**记什么**：每次真的做了决定，用 `causal-memory-record_decision` 写一条「决策 → 结果」边。结果还没出来时，outcome 先写「待验证」，relation 先按预判填（caused / enabled / prevented / no_effect），confidence_source 用 `llm_inferred`；将来结果明确了，用**同一条 decision 文本**再记一次真实结果，这条边就变成可对比的证据。
+
+**什么时候查**：进这个技能的第一步永远是「先查再答」——先 `causal-memory-search_memory` 或 `causal-memory-search_causal` 看类似情境的旧决策，再跑 counterfactual 对比。没有历史样本时，如实说「暂无同类历史记录」，不要编。
+
+**什么时候写**：①用户确认了本次真实选择、且结果已知或可标注时 → `record_decision`；②用户说出稳定的偏好/约束（如「我只做主板」「单票不超过两成」）→ `causal-memory-record_fact`。
+
+**关键前提**：counterfactual_query 的 `context` 参数尽量写全（当时的行情环境、仓位、约束条件）。**同一个 task_tag + 相似 context 的两次记录才会被当成可比分支**，context 空白会让对比失去意义。
+
+## 工具链
+
+### A. 决策前场景（用户正在犹豫）
+
+1. **查历史**：`causal-memory-search_memory`(query=用户的问题原话) —— 不确定该查事实还是查教训时用它；只想看决策教训用 `causal-memory-search_causal`(query, task_tag, limit)；只想看稳定偏好/参数用 `causal-memory-search_facts`(query)；想看跨任务的抽象规律（相似/重复/矛盾/改进）用 `causal-memory-search_patterns`(query)。
+2. **预测后果**：`causal-memory-intervention_query`(action=你准备做的动作的完整描述，如「持有 sz300308 不动，不加仓」)。
+3. **对比选项**：`causal-memory-counterfactual_query`(decision=选项A, alternative=选项B, task_tag, context=当前情境描述)。
+4. **成交后回填**：真实做了哪个 → `causal-memory-record_decision`(decision, outcome, relation, task_tag, context, confidence_source)。
+5. **可选校准**：结果出来后 `causal-memory-prediction_report`() 看这类对比建议历史上准不准。
+
+### B. 事后复盘场景（用户问「如果当时……」）
+
+1. **对齐事实**：先 `causal-memory-search_causal`(query=标的/操作关键词, task_tag)，找出当时真实记录的决策。
+2. **对比未选路径**：`causal-memory-counterfactual_query`(decision=**实际做的**, alternative=**没做的**, task_tag, context=当时情境)。若历史里已有这条边的真实结果，直接引用；若只有「待验证」，说明结论暂为预测。
+3. **补记结果**：如果当时那条边还是「待验证」，现在结果已知 → 用同一条 decision 文本调 `causal-memory-record_decision` 回填真实 outcome（这是本技能最重要的回填动作）。
+4. **结果不好、要找根因**：`causal-memory-trace_cause`(outcome_description=坏结果描述)；一层没找到就 `causal-memory-trace_cause_chain`(outcome_description, max_depth)。
+5. **要一段完整教训**：`causal-memory-reconstruct_lesson`(query=主题/决策文本)，让系统把相关边拼成叙事，而不是甩一堆原始记录。
+6. **发现旧记忆互相矛盾**：`causal-memory-resolve_updates`(limit, apply) —— 先不加 apply 预览，确认真的是旧结论被推翻，再 apply=true 落库。
+7. **发现某条经验本身记错了**：`causal-memory-invalidate_decision`(edge_id, reason) 软失效，保留审计痕迹，不物理删除。
+
+### C. 日常巡检（可选）
+
+- `causal-memory-causal_directory`(limit) 看最近决策目录，快速知道现在手里有哪些可比证据。
+- `causal-memory-prediction_report`() 定期查预测命中率，判断「该不该信这些对比结论」。
+
+## 输出格式
+
+回答必须包含以下小节，缺一不可：
+
+1. **对比结论**：表格呈现 —— 选项 / 历史可比样本数 / 典型结果 / 证据强度（强/中/弱/无样本）。两项并列，不替用户拍板。
+2. **证据来源**：逐条列出命中的历史决策（决策文本 + 结果 + task_tag + context 摘要），标明哪些是**已验证结果**、哪些仍是**待验证**。
+3. **本次已记录**：说明本次是否写入 `record_decision`；若写入了，「待验证」条目和预设的回填触发条件要写清楚。
+4. **证据缺口**：历史样本不足、context 不可比、或结论互相矛盾时，明确写出缺什么。
+5. **方法声明**：固定一句 —— 「以上为**基于历史记录的实证对比**，不是因果推断；样本量小或情境不同时结论不可外推。」
+
+## 记忆价值
+
+- 用一次，只多一条记录；用久了，**同一个 task_tag 下会沉淀出成对的可比分支**（做了 vs 没做），于是「我当时要是……」从情绪变成可检索的证据。
+- 「待验证」的 outcome 被逐步回填后，`prediction_report` 能告诉你：这类直觉判断历史上命中过几次，是该信还是该警惕。
+- `resolve_updates` + `invalidate_decision` 让错误经验不会一直污染后续判断，记忆库越用越干净。
+- `causal_directory` 让每次新决策都能秒级看到「我以前在这样的情境里付过什么代价」。
+
+## 合规边界
+
+- 只记录与呈现**历史统计与已发生事实**，不输出买卖建议、不推荐标的、不给目标价、不承诺收益。
+- 用户问「该不该买/卖」时，转换为「历史上相似情境的两条路各自结果如何」，并把选择权交回用户。
+- 不把「历史更优」表述为「未来更优」；实证对比 ≠ 因果推断，必须显式声明。
+- 只记录用户陈述的事实与已确认的决策，不替用户编造 outcome；未观察到的结果一律标注「待验证」。
+- 不记录与投资无关的敏感个人信息；事实记录只保留决策所需的偏好与约束。
+
+## 常见问题
+
+1. **历史里一条同类记录都没有怎么办？** 如实说明「暂无同类历史样本」，只做逻辑层面的利弊并列，并**当场写一条「待验证」的 record_decision**，把本次决策和情境先存下来——今天没证据，是为了以后有证据。
+2. **`context` 到底要写多细？** 写到能让未来的你和这次区分开：行情环境（涨/跌/震荡）+ 仓位与约束 + 触发原因。context 太笼统，两次不同性质的决策会被当成同一条分支，对比结论就会失真。
+3. **「待验证」一直没回填，会不会变成假证据？** 会。所以每条待验证记录都要记下**回填触发条件**（如「T+5 后」「清仓后」）；到点后用**原样的 decision 文本**再调一次 `record_decision` 写真实结果，绝不要新起一条 decision 文本，否则两条边无法配对。
+4. **对比结论和用户直觉相反，能直接说「你错了」吗？** 不能。只呈现证据强度和样本量，指出「历史样本里另一条路结果更好，但样本仅 N 条、情境差异 X」，让用户自己判断。
