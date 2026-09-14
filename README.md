@@ -1,6 +1,6 @@
 # Quant Agent Skills · 量化智能体技能集
 
-> 让 Agent **记住**你的每一次判断 —— **15 个分析技能 + 5 个记忆核心技能**
+> 让 Agent **记住**你的每一次判断 —— **17 个分析技能 + 5 个记忆核心技能**
 > 数据是商品，计算是工具，**记忆才是资产**。
 
 [English](#english) | 中文
@@ -34,7 +34,7 @@
 
 **用一年后**：前者给你 365 个孤立读数；后者给你一套**只属于你的交易经验库**——这才是别人拿不走的。
 
-## 20 个技能
+## 22 个技能
 
 ### 🧠 记忆核心（5）—— 产品灵魂
 
@@ -46,7 +46,7 @@
 | 4 | [`what-if`](skills/what-if/) | 如果当时没卖会怎样 / 这两个方案哪个好 | 反事实对比（决策前比较选项，决策后复盘未选路径） |
 | 5 | [`memory-health`](skills/memory-health/) | 我的记忆库怎么样 / 我的预测准吗 | 记忆库体检：预测命中率、矛盾解决、错误经验软失效 |
 
-### 🔬 分析技能（15）—— 每个都带**记忆回路**
+### 🔬 分析技能（17）—— 每个都带**记忆回路**
 
 每个分析技能都是「**前置检索 → 执行计算 → 后置写记忆 → 输出带历史参照**」的闭环。
 
@@ -55,13 +55,19 @@
 | 🛡 持仓风险 | [`portfolio-checkup`](skills/portfolio-checkup/) [`rebalance-plan`](skills/rebalance-plan/) [`volatility-alert`](skills/volatility-alert/) | 我的持仓有风险吗 / 该怎么调仓 / 波动会不会变大 |
 | 📈 市场状态 | [`market-regime`](skills/market-regime/) [`trend-turning`](skills/trend-turning/) | 现在什么状态 / 是趋势还是回调 |
 | 🔮 走势预测 | [`kline-forecast`](skills/kline-forecast/) [`next-day-prediction`](skills/next-day-prediction/) | 未来几天怎么走 / 明天大概怎么走 |
-| ⚡ 事件因果 | [`event-impact`](skills/event-impact/) [`event-counterfactual`](skills/event-counterfactual/) [`news-credibility`](skills/news-credibility/) [`sector-linkage`](skills/sector-linkage/) | 这消息有影响吗 / 这事拉动多少 / 结论靠谱吗 / 谁带谁 |
+| 📡 消息发现 | [`news-radar`](skills/news-radar/) | **今天有什么消息** / 最近发生了什么 / 扫一下消息面 |
+| ⚡ 事件因果 | [`event-impact`](skills/event-impact/) [`event-counterfactual`](skills/event-counterfactual/) [`event-propagation`](skills/event-propagation/) [`sector-linkage`](skills/sector-linkage/) | 这消息有影响吗 / 这事拉动多少 / **会传导到谁** / 谁带谁 |
+| 🔍 结论检验 | [`news-credibility`](skills/news-credibility/) | 这个结论靠谱吗 / 这信号是真的吗 / 是不是过拟合 |
 | 🧪 因子策略 | [`factor-vitality`](skills/factor-vitality/) [`factor-production-check`](skills/factor-production-check/) | 因子还能用吗 / 能上实盘吗 |
 | 🔄 批量运维 | [`batch-screening`](skills/batch-screening/) [`task-status`](skills/task-status/) | 帮我扫一批 / 任务跑完了吗 |
 
 ## 快速开始
 
 ### 1. 接入 MCP 工具（**至少挂记忆 + 数据 + 计算三组**）
+
+> ⚠️ 其中 `news-radar` 与 `event-propagation` 依赖两个**自建服务**（[news-mcp](https://github.com/JingxuanC/news-mcp)、
+> [causal-chain-mcp](https://github.com/JingxuanC/causal-chain-mcp)），不在 hub 上，需要自己 clone + `make serve`。
+> 其余 20 个技能只需 hub 的 `data` / `alpha` / `memory` 三组。详见 [`mcp-config/README.md`](mcp-config/README.md)。
 
 ```jsonc
 {
